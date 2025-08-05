@@ -19,6 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.client.model.EmptyModel;
 import net.neoforged.neoforge.client.model.geometry.IGeometryBakingContext;
 import net.neoforged.neoforge.client.model.geometry.IGeometryLoader;
 import net.neoforged.neoforge.client.model.geometry.IUnbakedGeometry;
@@ -39,12 +40,12 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
 
     @Override
     public BakedModel bake(IGeometryBakingContext context, ModelBaker baker, Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelState, ItemOverrides overrides) {
-        return new PassthroughBakedModel(
+        return new LazyModel(handler,
                 (model, stack, levevl, entity, seed) -> {
                     var map = new HashMap<>(unbakedGeometry.textureMap);
                     map.forEach((string, mat) -> unbakedGeometry.textureMap.put(string, mat.mapBoth(material -> new Material(handler.value().getAtlasLocation(), material.texture()), Function.identity())));
-                    return new BakedHolder(handler, unbakedGeometry.bake(baker, m -> handler.value().getSprite(m.texture()), modelState));
-                }, baker
+                    return unbakedGeometry.bake(baker, m -> handler.value().getSprite(m.texture()), modelState);
+                }
         );
     }
 
@@ -53,12 +54,90 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
         unbakedGeometry.resolveParents(modelGetter);
     }
 
+
     public static class BakedHolder implements BakedModel {
         BakedModel model;
         private final Holder<AssetHandler> handler;
 
         public BakedHolder(Holder<AssetHandler> handler, BakedModel bakedModel) {
             this.model = bakedModel;
+            this.handler = handler;
+        }
+
+        @Override
+        public List<BakedQuad> getQuads(@Nullable BlockState pState, @Nullable Direction pDirection, RandomSource pRandom) {
+            return model.getQuads(pState, pDirection, pRandom);
+        }
+
+        @Override
+        public boolean useAmbientOcclusion() {
+            return model.useAmbientOcclusion();
+        }
+
+        @Override
+        public boolean isGui3d() {
+            return model.isGui3d();
+        }
+
+        @Override
+        public boolean usesBlockLight() {
+            return model.usesBlockLight();
+        }
+
+        @Override
+        public boolean isCustomRenderer() {
+            return model.isCustomRenderer();
+        }
+
+        @Override
+        public TextureAtlasSprite getParticleIcon() {
+            return model.getParticleIcon();
+        }
+
+        @Override
+        public ItemOverrides getOverrides() {
+            return model.getOverrides();
+        }
+
+        @Override
+        public List<RenderType> getRenderTypes(ItemStack itemStack, boolean fabulous) {
+            return List.of(RenderType.entityCutout(handler.value().getAtlasLocation()));
+        }
+
+        @Override
+        public ItemTransforms getTransforms() {
+            return model.getTransforms();
+        }
+    }
+
+    public static class LazyModel implements BakedModel {
+//        @Override
+//        public BakedModel applyTransform(ItemDisplayContext transformType, PoseStack poseStack, boolean applyLeftHandTransform) {
+//            if (!rasterized) {
+//                transformCallback = () -> BakedModel.super.applyTransform(transformType, poseStack, applyLeftHandTransform);
+//            } else {
+//                BakedModel.super.applyTransform(transformType, poseStack, applyLeftHandTransform);
+//            }
+//            return this;
+//        }
+
+        BakedModel model;
+        private final Holder<AssetHandler> handler;
+        PassthroughBakedModel.BakedModelSupplier supplier;
+        boolean rasterized = false;
+
+        @Override
+        public List<BakedModel> getRenderPasses(ItemStack itemStack, boolean fabulous) {
+            if (!rasterized) {
+                this.model = supplier.get(null, itemStack, null, null, 0);
+                rasterized = true;
+            }
+            return BakedModel.super.getRenderPasses(itemStack, fabulous);
+        }
+
+        public LazyModel(Holder<AssetHandler> handler, PassthroughBakedModel.BakedModelSupplier bakedModel) {
+            this.model = EmptyModel.BAKED;
+            this.supplier = bakedModel;
             this.handler = handler;
         }
 

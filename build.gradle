@@ -112,7 +112,7 @@ dependencies {
 
     localRuntime "curse.maven:atlasviewer-633577:5490697"
     localRuntime "curse.maven:spark-361579:5759671"
-    localRuntime "io.redspace:irons_jewelry:1.21.1-1.1.0"
+    localRuntime "io.redspace:irons_jewelry:1.21.1-1.5.1"
     localRuntime "top.theillusivec4.curios:curios-neoforge:9.2.2+1.21.1"
     localRuntime "dev.shadowsoffire:Placebo:1.21.1-9.6.1"
     localRuntime "dev.shadowsoffire:ApothicAttributes:1.21.1-2.5.0"

@@ -21,11 +21,21 @@ import java.util.List;
 
 public class PassthroughBakedModel implements BakedModel {
     public interface BakedModelSupplier {
+        record Context(BakedModel pModel, ItemStack pStack, @Nullable ClientLevel pLevel,
+                       @Nullable LivingEntity pEntity, int pSeed) {
+        }
+
         BakedModel get(BakedModel pModel, ItemStack pStack, @Nullable ClientLevel pLevel, @Nullable LivingEntity pEntity, int pSeed);
     }
 
     BakedModel model;
     ItemOverrides overrides;
+
+    private void resolveChild(ItemOverrides.BakedOverride override, BakedModelSupplier.Context ctx) {
+        if (override.model != null) {
+            override.model.getOverrides().resolve(ctx.pModel, ctx.pStack, ctx.pLevel, ctx.pEntity, ctx.pSeed);
+        }
+    }
 
     public PassthroughBakedModel(BakedModelSupplier modelSupplier, ModelBaker baker) {
         this.model = EmptyModel.BAKED;
@@ -36,7 +46,9 @@ public class PassthroughBakedModel implements BakedModel {
             @Nullable
             @Override
             public BakedModel resolve(BakedModel pModel, ItemStack pStack, @Nullable ClientLevel pLevel, @Nullable LivingEntity pEntity, int pSeed) {
-                return modelSupplier.get(pModel, pStack, pLevel, pEntity, pSeed);
+                BakedModel model = modelSupplier.get(pModel, pStack, pLevel, pEntity, pSeed);
+//                model.getOverrides().getOverrides().forEach(ovr -> resolveChild(ovr, new BakedModelSupplier.Context(pModel, pStack, pLevel, pEntity, pSeed)));
+                return model/*.getOverrides().resolve(model, pStack, pLevel, pEntity, pSeed)*/;
             }
         };
     }
@@ -75,6 +87,7 @@ public class PassthroughBakedModel implements BakedModel {
     public ItemOverrides getOverrides() {
         return overrides;
     }
+
     @Override
     public ItemTransforms getTransforms() {
         return model.getTransforms();
