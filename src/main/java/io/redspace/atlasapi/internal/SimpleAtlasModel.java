@@ -28,6 +28,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
     private final BlockModel unbakedGeometry;
@@ -41,11 +42,11 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
     @Override
     public BakedModel bake(IGeometryBakingContext context, ModelBaker baker, Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelState, ItemOverrides overrides) {
         return new LazyModel(handler,
-                (model, stack, levevl, entity, seed) -> {
+                () -> {
                     var map = new HashMap<>(unbakedGeometry.textureMap);
                     map.forEach((string, mat) -> unbakedGeometry.textureMap.put(string, mat.mapBoth(material -> new Material(handler.value().getAtlasLocation(), material.texture()), Function.identity())));
                     return unbakedGeometry.bake(baker, m -> handler.value().getSprite(m.texture()), modelState);
-                }
+                }, unbakedGeometry
         );
     }
 
@@ -55,90 +56,30 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
     }
 
 
-    public static class BakedHolder implements BakedModel {
-        BakedModel model;
-        private final Holder<AssetHandler> handler;
-
-        public BakedHolder(Holder<AssetHandler> handler, BakedModel bakedModel) {
-            this.model = bakedModel;
-            this.handler = handler;
-        }
-
-        @Override
-        public List<BakedQuad> getQuads(@Nullable BlockState pState, @Nullable Direction pDirection, RandomSource pRandom) {
-            return model.getQuads(pState, pDirection, pRandom);
-        }
-
-        @Override
-        public boolean useAmbientOcclusion() {
-            return model.useAmbientOcclusion();
-        }
-
-        @Override
-        public boolean isGui3d() {
-            return model.isGui3d();
-        }
-
-        @Override
-        public boolean usesBlockLight() {
-            return model.usesBlockLight();
-        }
-
-        @Override
-        public boolean isCustomRenderer() {
-            return model.isCustomRenderer();
-        }
-
-        @Override
-        public TextureAtlasSprite getParticleIcon() {
-            return model.getParticleIcon();
-        }
-
-        @Override
-        public ItemOverrides getOverrides() {
-            return model.getOverrides();
-        }
-
-        @Override
-        public List<RenderType> getRenderTypes(ItemStack itemStack, boolean fabulous) {
-            return List.of(RenderType.entityCutout(handler.value().getAtlasLocation()));
-        }
-
-        @Override
-        public ItemTransforms getTransforms() {
-            return model.getTransforms();
-        }
-    }
-
     public static class LazyModel implements BakedModel {
-//        @Override
-//        public BakedModel applyTransform(ItemDisplayContext transformType, PoseStack poseStack, boolean applyLeftHandTransform) {
-//            if (!rasterized) {
-//                transformCallback = () -> BakedModel.super.applyTransform(transformType, poseStack, applyLeftHandTransform);
-//            } else {
-//                BakedModel.super.applyTransform(transformType, poseStack, applyLeftHandTransform);
-//            }
-//            return this;
-//        }
-
         BakedModel model;
         private final Holder<AssetHandler> handler;
-        PassthroughBakedModel.BakedModelSupplier supplier;
-        boolean rasterized = false;
+        Supplier<BakedModel> bakery;
+        boolean baked = false;
+        /** Item Transforms are applied before the simple model is cached, meaning we rely on what is in the json for the first frame of rendering. After caching, we defer to the cache */
+        ItemTransforms defaultTransforms;
 
         @Override
         public List<BakedModel> getRenderPasses(ItemStack itemStack, boolean fabulous) {
-            if (!rasterized) {
-                this.model = supplier.get(null, itemStack, null, null, 0);
-                rasterized = true;
+            if (!baked) {
+                this.model = bakery.get();
+                bakery = null;
+                defaultTransforms = null;
+                baked = true;
             }
             return BakedModel.super.getRenderPasses(itemStack, fabulous);
         }
 
-        public LazyModel(Holder<AssetHandler> handler, PassthroughBakedModel.BakedModelSupplier bakedModel) {
+        public LazyModel(Holder<AssetHandler> handler, Supplier<BakedModel> bakery, BlockModel context) {
             this.model = EmptyModel.BAKED;
-            this.supplier = bakedModel;
+            this.bakery = bakery;
             this.handler = handler;
+            this.defaultTransforms = context.getTransforms();
         }
 
         @Override
@@ -183,7 +124,7 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
 
         @Override
         public ItemTransforms getTransforms() {
-            return model.getTransforms();
+            return baked ? model.getTransforms() : defaultTransforms;
         }
     }
 
