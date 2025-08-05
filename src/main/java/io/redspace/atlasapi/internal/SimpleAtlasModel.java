@@ -41,7 +41,7 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
 
     @Override
     public BakedModel bake(IGeometryBakingContext context, ModelBaker baker, Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelState, ItemOverrides overrides) {
-        return new LazyModel(handler,
+        return new Baked(handler,
                 () -> {
                     var map = new HashMap<>(unbakedGeometry.textureMap);
                     map.forEach((string, mat) -> unbakedGeometry.textureMap.put(string, mat.mapBoth(material -> new Material(handler.value().getAtlasLocation(), material.texture()), Function.identity())));
@@ -55,10 +55,13 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
         unbakedGeometry.resolveParents(modelGetter);
     }
 
-
-    public static class LazyModel implements BakedModel {
+    /**
+     * A Lazy-Loaded and cached model holder that bakes the model when it is first rendered. Also ensures atlas usage is correct
+     */
+    public static class Baked implements BakedModel {
         BakedModel model;
         private final Holder<AssetHandler> handler;
+        /** Simple Models are non-itemstack-sensitive, meaning no args are required */
         Supplier<BakedModel> bakery;
         boolean baked = false;
         /** Item Transforms are applied before the simple model is cached, meaning we rely on what is in the json for the first frame of rendering. After caching, we defer to the cache */
@@ -75,7 +78,7 @@ public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
             return BakedModel.super.getRenderPasses(itemStack, fabulous);
         }
 
-        public LazyModel(Holder<AssetHandler> handler, Supplier<BakedModel> bakery, BlockModel context) {
+        public Baked(Holder<AssetHandler> handler, Supplier<BakedModel> bakery, BlockModel context) {
             this.model = EmptyModel.BAKED;
             this.bakery = bakery;
             this.handler = handler;
