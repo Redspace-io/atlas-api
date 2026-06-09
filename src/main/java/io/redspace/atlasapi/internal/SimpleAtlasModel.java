@@ -5,6 +5,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.redspace.atlasapi.api.AssetHandler;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.item.CuboidItemModelWrapper;
 import net.minecraft.client.renderer.item.ItemModel;
 import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
@@ -67,7 +68,7 @@ public final class SimpleAtlasModel implements ItemModel {
         QuadCollection quads = this.baked;
 
         ItemStackRenderState.LayerRenderState layer = output.newLayer();
-        layer.setExtents(() -> net.minecraft.client.renderer.item.CuboidItemModelWrapper.computeExtents(quads.getAll()));
+        layer.setExtents(() -> CuboidItemModelWrapper.computeExtents(quads.getAll()));
         layer.setLocalTransform(this.transformation);
         this.properties.applyToLayer(layer, displayContext);
         layer.prepareQuadList().addAll(quads.getAll());

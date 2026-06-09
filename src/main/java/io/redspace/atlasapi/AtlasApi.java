@@ -1,7 +1,6 @@
 package io.redspace.atlasapi;
 
 import com.mojang.logging.LogUtils;
-import io.redspace.atlasapi.example.ExampleRegistry;
 import io.redspace.atlasapi.internal.ClientManager;
 import io.redspace.atlasapi.internal.DynamicAtlasModel;
 import io.redspace.atlasapi.internal.SimpleAtlasModel;
@@ -29,8 +28,6 @@ public class AtlasApi {
         modEventBus.addListener(this::registerRegistries);
         NeoForge.EVENT_BUS.addListener(this::onLogOut);
         NeoForge.EVENT_BUS.addListener(this::onLogIn);
-
-        ExampleRegistry.register(modEventBus);
     }
 
     public void onLogOut(ClientPlayerNetworkEvent.LoggingOut event) {

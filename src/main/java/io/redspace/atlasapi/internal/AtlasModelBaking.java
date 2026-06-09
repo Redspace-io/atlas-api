@@ -7,9 +7,11 @@ import io.redspace.atlasapi.api.AtlasApiRegistry;
 import io.redspace.atlasapi.api.data.BakingPreparations;
 import io.redspace.atlasapi.api.data.ModelLayer;
 import net.minecraft.client.renderer.block.dispatch.BlockModelRotation;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.block.dispatch.ModelState;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.resources.model.ModelBaker;
+import net.minecraft.client.resources.model.ResolvedModel;
 import net.minecraft.client.resources.model.cuboid.ItemModelGenerator;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.client.resources.model.geometry.QuadCollection;
@@ -104,12 +106,12 @@ final class AtlasModelBaking {
         }
 
         @Override
-        public net.minecraft.client.resources.model.ResolvedModel getModel(Identifier location) {
+        public ResolvedModel getModel(Identifier location) {
             throw new UnsupportedOperationException("Runtime atlas baking does not resolve models by id");
         }
 
         @Override
-        public net.minecraft.client.renderer.block.dispatch.BlockStateModelPart missingBlockModelPart() {
+        public BlockStateModelPart missingBlockModelPart() {
             throw new UnsupportedOperationException("Runtime atlas baking does not provide block model parts");
         }
 
