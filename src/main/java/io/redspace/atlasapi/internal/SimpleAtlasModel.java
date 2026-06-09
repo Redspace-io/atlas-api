@@ -1,152 +1,122 @@
 package io.redspace.atlasapi.internal;
 
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
+import com.mojang.math.Transformation;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.redspace.atlasapi.api.AssetHandler;
-import io.redspace.atlasapi.api.AtlasApiRegistry;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.BlockModel;
-import net.minecraft.client.renderer.block.model.ItemOverrides;
-import net.minecraft.client.renderer.block.model.ItemTransforms;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.*;
-import net.minecraft.core.Direction;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.item.ItemModel;
+import net.minecraft.client.renderer.item.ItemModelResolver;
+import net.minecraft.client.renderer.item.ItemStackRenderState;
+import net.minecraft.client.renderer.item.ModelRenderProperties;
+import net.minecraft.client.resources.model.ModelBaker;
+import net.minecraft.client.resources.model.ResolvableModel;
+import net.minecraft.client.resources.model.ResolvedModel;
+import net.minecraft.client.resources.model.cuboid.ItemModelGenerator;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
+import net.minecraft.client.resources.model.geometry.QuadCollection;
+import net.minecraft.client.resources.model.sprite.Material;
+import net.minecraft.client.resources.model.sprite.TextureSlots;
 import net.minecraft.core.Holder;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.RandomSource;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.ItemOwner;
+import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.client.model.EmptyModel;
-import net.neoforged.neoforge.client.model.geometry.IGeometryBakingContext;
-import net.neoforged.neoforge.client.model.geometry.IGeometryLoader;
-import net.neoforged.neoforge.client.model.geometry.IUnbakedGeometry;
+import org.joml.Matrix4fc;
+import org.jspecify.annotations.Nullable;
 
-import javax.annotation.Nullable;
-import java.util.HashMap;
-import java.util.List;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 
-public class SimpleAtlasModel implements IUnbakedGeometry<SimpleAtlasModel> {
-    private final BlockModel unbakedGeometry;
+/**
+ * The static, non-stack-sensitive item model. It resolves a normal item model JSON that allows vanilla conventions such
+ * as {@code parent}, display transforms, etc
+ * <p>
+ * Geometry is baked once, lazily, on the render thread
+ */
+public final class SimpleAtlasModel implements ItemModel {
     private final Holder<AssetHandler> handler;
+    private final Map<String, Identifier> textureLayers;
+    private final ModelRenderProperties properties;
+    private final Matrix4fc transformation;
 
-    public SimpleAtlasModel(BlockModel unbakedGeometry, Holder<AssetHandler> handler) {
-        this.unbakedGeometry = unbakedGeometry;
+    private @Nullable QuadCollection baked;
+
+    public SimpleAtlasModel(Holder<AssetHandler> handler, Map<String, Identifier> textureLayers, ModelRenderProperties properties, Matrix4fc transformation) {
         this.handler = handler;
+        this.textureLayers = textureLayers;
+        this.properties = properties;
+        this.transformation = transformation;
     }
 
     @Override
-    public BakedModel bake(IGeometryBakingContext context, ModelBaker baker, Function<Material, TextureAtlasSprite> spriteGetter, ModelState modelState, ItemOverrides overrides) {
-        return new Baked(handler,
-                () -> {
-                    var map = new HashMap<>(unbakedGeometry.textureMap);
-                    map.forEach((string, mat) -> unbakedGeometry.textureMap.put(string, mat.mapBoth(material -> new Material(handler.value().getAtlasLocation(), material.texture()), Function.identity())));
-                    return unbakedGeometry.bake(baker, m -> handler.value().getSprite(m.texture()), modelState);
-                }, unbakedGeometry
-        );
-    }
+    public void update(
+            ItemStackRenderState output,
+            ItemStack item,
+            ItemModelResolver resolver,
+            ItemDisplayContext displayContext,
+            @Nullable ClientLevel level,
+            @Nullable ItemOwner owner,
+            int seed
+    ) {
+        output.appendModelIdentityElement(this);
+        if (this.baked == null) {
+            this.baked = AtlasModelBaking.bakeSimpleModel(this.textureLayers, this.handler.value());
+        }
+        QuadCollection quads = this.baked;
 
-    @Override
-    public void resolveParents(Function<ResourceLocation, UnbakedModel> modelGetter, IGeometryBakingContext context) {
-        unbakedGeometry.resolveParents(modelGetter);
+        ItemStackRenderState.LayerRenderState layer = output.newLayer();
+        layer.setExtents(() -> net.minecraft.client.renderer.item.CuboidItemModelWrapper.computeExtents(quads.getAll()));
+        layer.setLocalTransform(this.transformation);
+        this.properties.applyToLayer(layer, displayContext);
+        layer.prepareQuadList().addAll(quads.getAll());
+        if (quads.hasMaterialFlag(BakedQuad.FLAG_ANIMATED)) {
+            output.setAnimated();
+        }
     }
 
     /**
-     * A Lazy-Loaded and cached model holder that bakes the model when it is first rendered. Also ensures atlas usage is correct
+     * Client item model definition for {@code atlas_api:simple_model}.
      */
-    public static class Baked implements BakedModel {
-        BakedModel model;
-        private final Holder<AssetHandler> handler;
-        /** Simple Models are non-itemstack-sensitive, meaning no args are required */
-        Supplier<BakedModel> bakery;
-        boolean baked = false;
-        /** Item Transforms are applied before the simple model is cached, meaning we rely on what is in the json for the first frame of rendering. After caching, we defer to the cache */
-        ItemTransforms defaultTransforms;
+    public record Unbaked(Identifier handler, Identifier model, Optional<Transformation> transformation) implements ItemModel.Unbaked {
+        public static final MapCodec<Unbaked> MAP_CODEC = RecordCodecBuilder.mapCodec(
+                instance -> instance.group(
+                        Identifier.CODEC.fieldOf("handler").forGetter(Unbaked::handler),
+                        Identifier.CODEC.fieldOf("model").forGetter(Unbaked::model),
+                        Transformation.EXTENDED_CODEC.optionalFieldOf("transformation").forGetter(Unbaked::transformation)
+                ).apply(instance, Unbaked::new)
+        );
 
         @Override
-        public List<BakedModel> getRenderPasses(ItemStack itemStack, boolean fabulous) {
-            if (!baked) {
-                this.model = bakery.get();
-                bakery = null;
-                defaultTransforms = null;
-                baked = true;
+        public MapCodec<? extends ItemModel.Unbaked> type() {
+            return MAP_CODEC;
+        }
+
+        @Override
+        public void resolveDependencies(ResolvableModel.Resolver resolver) {
+            resolver.markDependency(this.model);
+        }
+
+        @Override
+        public ItemModel bake(ItemModel.BakingContext context, Matrix4fc transformation) {
+            Holder<AssetHandler> handlerHolder = AtlasModelBaking.requireHandler(this.handler);
+            ModelBaker baker = context.blockModelBaker();
+            ResolvedModel resolvedModel = baker.getModel(this.model);
+            TextureSlots slots = resolvedModel.getTopTextureSlots();
+
+            Map<String, Identifier> layers = new LinkedHashMap<>();
+            for (String layerName : ItemModelGenerator.LAYERS) {
+                Material material = slots.getMaterial(layerName);
+                if (material == null) {
+                    break;
+                }
+                layers.put(layerName, material.sprite());
             }
-            return BakedModel.super.getRenderPasses(itemStack, fabulous);
-        }
 
-        public Baked(Holder<AssetHandler> handler, Supplier<BakedModel> bakery, BlockModel context) {
-            this.model = EmptyModel.BAKED;
-            this.bakery = bakery;
-            this.handler = handler;
-            this.defaultTransforms = context.getTransforms();
-        }
-
-        @Override
-        public List<BakedQuad> getQuads(@Nullable BlockState pState, @Nullable Direction pDirection, RandomSource pRandom) {
-            return model.getQuads(pState, pDirection, pRandom);
-        }
-
-        @Override
-        public boolean useAmbientOcclusion() {
-            return model.useAmbientOcclusion();
-        }
-
-        @Override
-        public boolean isGui3d() {
-            return model.isGui3d();
-        }
-
-        @Override
-        public boolean usesBlockLight() {
-            return model.usesBlockLight();
-        }
-
-        @Override
-        public boolean isCustomRenderer() {
-            return model.isCustomRenderer();
-        }
-
-        @Override
-        public TextureAtlasSprite getParticleIcon() {
-            return model.getParticleIcon();
-        }
-
-        @Override
-        public ItemOverrides getOverrides() {
-            return model.getOverrides();
-        }
-
-        @Override
-        public List<RenderType> getRenderTypes(ItemStack itemStack, boolean fabulous) {
-            return List.of(RenderType.entityCutout(handler.value().getAtlasLocation()));
-        }
-
-        @Override
-        public ItemTransforms getTransforms() {
-            return baked ? model.getTransforms() : defaultTransforms;
-        }
-    }
-
-    public static final class Loader implements IGeometryLoader<SimpleAtlasModel> {
-        public static final SimpleAtlasModel.Loader INSTANCE = new SimpleAtlasModel.Loader();
-
-        private Loader() {
-        }
-
-        @Override
-        public SimpleAtlasModel read(JsonObject jsonObject, JsonDeserializationContext deserializationContext) {
-            try {
-                BlockModel baseModel = new BlockModel.Deserializer().deserialize(jsonObject, BlockModel.class, deserializationContext);
-                String typestring = jsonObject.get("handler").getAsString();
-                Holder<AssetHandler> type = AtlasApiRegistry.ASSET_HANDLER_REGISTRY.getHolderOrThrow(ResourceKey.create(AtlasApiRegistry.ASSET_HANDLER_REGISTRY_KEY, ResourceLocation.parse(typestring)));
-                return new SimpleAtlasModel(baseModel, type);
-            } catch (Exception e) {
-                throw new JsonParseException(e.getMessage());
-            }
+            ModelRenderProperties properties = ModelRenderProperties.fromResolvedModel(baker, resolvedModel, slots);
+            Matrix4fc modelTransform = Transformation.compose(transformation, this.transformation);
+            return new SimpleAtlasModel(handlerHolder, layers, properties, modelTransform);
         }
     }
 }
