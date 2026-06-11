@@ -80,12 +80,11 @@ public final class SimpleAtlasModel implements ItemModel {
     /**
      * Client item model definition for {@code atlas_api:simple_model}.
      */
-    public record Unbaked(Identifier handler, Identifier model, Optional<Transformation> transformation) implements ItemModel.Unbaked {
+    public record Unbaked(Identifier handler, Identifier model) implements ItemModel.Unbaked {
         public static final MapCodec<Unbaked> MAP_CODEC = RecordCodecBuilder.mapCodec(
                 instance -> instance.group(
                         Identifier.CODEC.fieldOf("handler").forGetter(Unbaked::handler),
-                        Identifier.CODEC.fieldOf("model").forGetter(Unbaked::model),
-                        Transformation.EXTENDED_CODEC.optionalFieldOf("transformation").forGetter(Unbaked::transformation)
+                        Identifier.CODEC.fieldOf("model").forGetter(Unbaked::model)
                 ).apply(instance, Unbaked::new)
         );
 
@@ -115,9 +114,8 @@ public final class SimpleAtlasModel implements ItemModel {
                 layers.put(layerName, material.sprite());
             }
 
-            ModelRenderProperties properties = ModelRenderProperties.fromResolvedModel(baker, resolvedModel, slots);
-            Matrix4fc modelTransform = Transformation.compose(transformation, this.transformation);
-            return new SimpleAtlasModel(handlerHolder, layers, properties, modelTransform);
+            AtlasModelBaking.ModelRenderSetup setup = AtlasModelBaking.resolveModelSetup(baker, this.model, transformation);
+            return new SimpleAtlasModel(handlerHolder, layers, setup.properties(), setup.transformation());
         }
     }
 }

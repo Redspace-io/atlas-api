@@ -21,17 +21,19 @@ import java.util.Objects;
  * <p>
  * In order for an item to use these sprites in game, the item's client item definition (under <code>assets/&lt;mod&gt;/items/</code>)
  * must use the <code>atlas_api:dynamic_model</code> item model type, and provide the Identifier to your registered handler.
- * For example:
+ * An optional {@code model} reference supplies vanilla display conventions (parent chain, handheld/gui transforms):
  * <pre>
  * {@code
  * {
  *   "model": {
  *     "type": "atlas_api:dynamic_model",
- *     "handler": "examplemod:my_handler"
+ *     "handler": "examplemod:my_handler",
+ *     "model": "examplemod:item/my_tool_base"
  *   }
  * }
  * }
  * </pre>
+ * When {@code model} is omitted, {@code minecraft:item/generated} display transforms are used.
  * This then uses your {@code makeBakedModelPreparations} to prepare and bake the models for that item.
  * <p>
  * For static (non item-stack-sensitive) items, the {@code atlas_api:simple_model} item model type may be used

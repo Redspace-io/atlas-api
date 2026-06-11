@@ -17,17 +17,21 @@ import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.client.resources.model.geometry.QuadCollection;
 import net.minecraft.client.resources.model.sprite.Material;
 import net.minecraft.client.resources.model.sprite.MaterialBaker;
+import net.minecraft.client.resources.model.sprite.TextureSlots;
+import net.minecraft.client.renderer.item.ModelRenderProperties;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.model.ComposedModelState;
 import net.neoforged.neoforge.client.model.quad.BakedColors;
 import net.neoforged.neoforge.client.model.quad.BakedNormals;
+import org.joml.Matrix4fc;
 import org.joml.Vector3fc;
 
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Shared runtime baking helpers that turn {@link AssetHandler} sprite layers into {@link QuadCollection}s bound to the
@@ -43,6 +47,20 @@ final class AtlasModelBaking {
     static Holder<AssetHandler> requireHandler(Identifier handlerId) {
         return AtlasApiRegistry.ASSET_HANDLER_REGISTRY.get(handlerId)
                 .orElseThrow(() -> new IllegalStateException("Unknown asset handler: " + handlerId));
+    }
+
+    /**
+     * Resolves vanilla display properties (parent chain, gui/handheld transforms, gui light, particle sprite) from a
+     * model JSON without baking its geometry.
+     */
+    static ModelRenderSetup resolveModelSetup(ModelBaker baker, Identifier modelId, Matrix4fc bakeTransform) {
+        ResolvedModel resolvedModel = baker.getModel(modelId);
+        TextureSlots slots = resolvedModel.getTopTextureSlots();
+        ModelRenderProperties properties = ModelRenderProperties.fromResolvedModel(baker, resolvedModel, slots);
+        return new ModelRenderSetup(properties, bakeTransform);
+    }
+
+    record ModelRenderSetup(ModelRenderProperties properties, Matrix4fc transformation) {
     }
 
     /**
